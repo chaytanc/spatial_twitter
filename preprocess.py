@@ -12,7 +12,7 @@ import torch
 from tqdm import tqdm
 
 # Models
-# model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 # model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
 
 # Do some setup
@@ -24,69 +24,37 @@ anti_df = pd.read_csv(anti_f)
 pro_df = pd.read_csv(pro_f)
 scaler = StandardScaler().set_output(transform="pandas")
 
+from transformers import GPT2Tokenizer, GPT2Model
 
-# TODO try to get perfect reconstructions from BART, and if that doesn't work, try prompt engineering
-# to ask for "repeat the meaning of these embeddings without adding any additional output tokens" from 
-# any generative model by appending embeddings for the system prompt to the embedding from the clusters
-from transformers import BartTokenizer, BartForConditionalGeneration
-import torch
+# Instantiate the model and tokenizer
+# model = AutoModelCausalLM.from_pretrained('gpt2')
+model = GPT2Model.from_pretrained('gpt2', output_hidden_states=True)
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 
-# Load BART tokenizer and model
-model_name = "facebook/bart-large"
-tokenizer = BartTokenizer.from_pretrained(model_name)
-model = BartForConditionalGeneration.from_pretrained(model_name)
+def embed(text):
+    input_ids = tokenizer(text, return_tensors="pt")['input_ids']
+    # Note: no positional embeddings... also these are embeddings before they've gone through the transformer, not after
+    # embeddings = model.transformer.wte.weight[input_ids] AutoModel
+    embeddings = model(input_ids).last_hidden_state
+    # TODO embeddings = model(**encoded_input).last_hidden_state ??
+    # embeddings = model(**encoded_input).last_hidden_state
+    # https://stackoverflow.com/questions/75547772/recovering-input-ids-from-input-embeddings-using-gpt-2
+    print(embeddings[0])
+    print(embeddings.shape)
+    return embeddings
 
-# def get_bart_embedding(text):
-#     """Extract token and sentence embeddings from BART"""
-#     inputs = tokenizer(text, return_tensors="pt", add_special_tokens=True)
-#     input_ids = inputs["input_ids"]
+test_em = embed("test with multiple tokens and embeddings i hope")
+def reconstruct_embedding(embeddings):
+    sys_prompt = "Repeat the precise meaning of the following without adding any additional characters whatsoever: "
+    em_sys_prompt = embed(sys_prompt)
+    reconstruction_embedding = torch.cat((em_sys_prompt, embeddings), 1)
+    pred_ids = torch.argmax(reconstruction_embedding, dim=-1)
+    # decoded_text = tokenizer.decode(pred_ids)
+    decoded_text = tokenizer.decode(pred_ids[0])
+    print(decoded_text)
+    return reconstruction_embedding
+reconstruct_embedding(test_em)
 
-#     with torch.no_grad():
-#         encoder_outputs = model.model.encoder(input_ids)
-
-#     token_embeddings = encoder_outputs[0]  # Token-wise embeddings
-#     sentence_embedding = token_embeddings.mean(dim=1)  # Mean pooling for sentence embedding
-
-#     return token_embeddings, sentence_embedding, input_ids
-# 
-# def embedding_to_text(embedding, input_ids):
-#     """Decode embeddings back into text using BART's decoder"""
-#     with torch.no_grad():
-#         generated_ids = model.generate(
-#             input_ids=input_ids,  # Providing original input_ids helps guide reconstruction
-#             max_length=20
-#         )
-    
-#     return tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-# Example usage
-# word_embeddings, sentence_embedding, input_ids = get_bart_embedding("Hello world!")
-# decoded_text = embedding_to_text(word_embeddings, input_ids)
-# print("Decoded Text:", decoded_text)  # Expected: "Hello world!"
-
-import jax.numpy as jnp
-from transformers import AutoTokenizer, FlaxBartForConditionalGeneration
-
-model = FlaxBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
-tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
-
-text = "My friends are cool but they eat too many carbs."
-inputs = tokenizer(text, return_tensors="jax")
-encoder_outputs = model.encode(**inputs)
-
-decoder_start_token_id = model.config.decoder_start_token_id
-decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
-
-generated_ids = model.generate(
-    decoder_input_ids,
-    encoder_outputs=encoder_outputs,
-    num_return_sequences=1,
-    do_sample=False  # Turn off sampling for deterministic output
-)
-
-# Decode generated token IDs into text
-decoded_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-
-print("Decoded Text:", decoded_text)
 
 # Do we want to cluster before or after mapping to 2d? clustering before might retain the rich high dimensional data before we pca, but then if we do PCA on individual clusters we can't put them on the same map... or can't we?
 # Clustering afterward is going to be necessary for sure in order to make our visualization readable (not having 100000 centroids)
@@ -126,8 +94,8 @@ def show_map(kmeans):
     plt.show()
 
 def process():
-    anti = get_bart_embedding(anti_df["Hit Sentence"][:1000])
-    pro = get_bart_embedding(pro_df["Hit Sentence"][:1000])
+    anti = embed(anti_df["Hit Sentence"][:1000])
+    pro = embed(pro_df["Hit Sentence"][:1000])
     print("pro0", pro[0])
     # TODO concat pro and anti?
     two_dim, pca = map_to_2d(pro)
