@@ -24,11 +24,12 @@ anti_df = pd.read_csv(anti_f)
 pro_df = pd.read_csv(pro_f)
 scaler = StandardScaler().set_output(transform="pandas")
 
-from transformers import GPT2Tokenizer, GPT2Model
+from transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel
 
 # Instantiate the model and tokenizer
 # model = AutoModelCausalLM.from_pretrained('gpt2')
 model = GPT2Model.from_pretrained('gpt2', output_hidden_states=True)
+recon_model = GPT2LMHeadModel.from_pretrained('gpt2')
 tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 
 def embed(text):
@@ -39,8 +40,6 @@ def embed(text):
     # TODO embeddings = model(**encoded_input).last_hidden_state ??
     # embeddings = model(**encoded_input).last_hidden_state
     # https://stackoverflow.com/questions/75547772/recovering-input-ids-from-input-embeddings-using-gpt-2
-    print(embeddings[0])
-    print(embeddings.shape)
     return embeddings
 
 test_em = embed("test with multiple tokens and embeddings i hope")
@@ -48,9 +47,13 @@ def reconstruct_embedding(embeddings):
     sys_prompt = "Repeat the precise meaning of the following without adding any additional characters whatsoever: "
     em_sys_prompt = embed(sys_prompt)
     reconstruction_embedding = torch.cat((em_sys_prompt, embeddings), 1)
-    pred_ids = torch.argmax(reconstruction_embedding, dim=-1)
+    recon_model.eval()
+    with torch.no_grad():
+        # Pass embedding through GPT-2 transformer layers
+        outputs = recon_model(inputs_embeds=reconstruction_embedding)  # Generate logits over vocabulary
+    token_ids = torch.argmax(outputs.logits, dim=-1)
     # decoded_text = tokenizer.decode(pred_ids)
-    decoded_text = tokenizer.decode(pred_ids[0])
+    decoded_text = tokenizer.decode(token_ids[0])
     print(decoded_text)
     return reconstruction_embedding
 reconstruct_embedding(test_em)
