@@ -10,6 +10,9 @@ __pycache__/
 .vscode/
 .venv/
 dataverse_files/
+finetuned_gpt2_embeddings/
+gpt2_embedding_finetune/
+*.pkl
 
 # Distribution / packaging
 .Python

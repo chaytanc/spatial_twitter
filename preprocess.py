@@ -10,6 +10,7 @@ from sklearn.neighbors import KNeighborsClassifier
 import matplotlib.pyplot as plt
 import torch
 from tqdm import tqdm
+import gc
 
 # Models
 model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
@@ -24,23 +25,39 @@ anti_df = pd.read_csv(anti_f)
 pro_df = pd.read_csv(pro_f)
 scaler = StandardScaler().set_output(transform="pandas")
 
-from transformers import GPT2Tokenizer, GPT2Model
+from transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel
 
 # Instantiate the model and tokenizer
+MAX_LENGTH = 30
 # model = AutoModelCausalLM.from_pretrained('gpt2')
-model = GPT2Model.from_pretrained('gpt2', output_hidden_states=True)
+model = GPT2Model.from_pretrained('distilgpt2', output_hidden_states=True)
+# recon_model = GPT2LMHeadModel.from_pretrained('gpt2')
+recon_model = GPT2LMHeadModel.from_pretrained("./finetuned_gpt2_embeddings")
+# recon_tokenizer = GPT2Tokenizer.from_pretrained("./finetuned_gpt2_embeddings")
 tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+tokenizer.pad_token = tokenizer.eos_token
+
+device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+if torch.backends.mps.is_available():
+    try:
+        model.to(device)  # Try to use MPS GPU
+        recon_model.to(device)
+    except RuntimeError as e:
+        print("MPS GPU out of memory, switching to CPU...")
+        model.to("cpu")  # Fall back to CPU
 
 def embed(text):
-    input_ids = tokenizer(text, return_tensors="pt")['input_ids']
-    # Note: no positional embeddings... also these are embeddings before they've gone through the transformer, not after
-    # embeddings = model.transformer.wte.weight[input_ids] AutoModel
-    embeddings = model(input_ids).last_hidden_state
-    # TODO embeddings = model(**encoded_input).last_hidden_state ??
-    # embeddings = model(**encoded_input).last_hidden_state
-    # https://stackoverflow.com/questions/75547772/recovering-input-ids-from-input-embeddings-using-gpt-2
-    print(embeddings[0])
-    print(embeddings.shape)
+    input_ids = tokenizer(text, 
+                          return_tensors="pt", 
+                          padding="max_length",
+                          truncation=True,
+                          max_length=MAX_LENGTH)['input_ids']
+    input_ids = input_ids.to(device)
+    with torch.no_grad():
+        embeddings = model(input_ids).last_hidden_state
+
+    del input_ids
+    gc.collect() 
     return embeddings
 
 test_em = embed("test with multiple tokens and embeddings i hope")
@@ -48,12 +65,16 @@ def reconstruct_embedding(embeddings):
     sys_prompt = "Repeat the precise meaning of the following without adding any additional characters whatsoever: "
     em_sys_prompt = embed(sys_prompt)
     reconstruction_embedding = torch.cat((em_sys_prompt, embeddings), 1)
-    pred_ids = torch.argmax(reconstruction_embedding, dim=-1)
+    recon_model.eval()
+    with torch.no_grad():
+        # Pass embedding through GPT-2 transformer layers
+        outputs = recon_model(inputs_embeds=reconstruction_embedding)  # Generate logits over vocabulary
+    token_ids = torch.argmax(outputs.logits, dim=-1)
     # decoded_text = tokenizer.decode(pred_ids)
-    decoded_text = tokenizer.decode(pred_ids[0])
+    decoded_text = tokenizer.decode(token_ids[0])
     print(decoded_text)
     return reconstruction_embedding
-reconstruct_embedding(test_em)
+# reconstruct_embedding(test_em)
 
 
 # Do we want to cluster before or after mapping to 2d? clustering before might retain the rich high dimensional data before we pca, but then if we do PCA on individual clusters we can't put them on the same map... or can't we?
@@ -109,9 +130,6 @@ def process():
 # TODO shading and prevalence estimates
 # TODO -- need to mix pro and anti tweets in clustering data / not do separately, but still keep track of which is which / have labels
 
-
-
-
-'''
-
-'''
+if __name__ == "__main__":
+    # process()
+    reconstruct_embedding(test_em)
