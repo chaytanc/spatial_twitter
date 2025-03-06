@@ -31,8 +31,8 @@ from transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel
 MAX_LENGTH = 30
 # model = AutoModelCausalLM.from_pretrained('gpt2')
 model = GPT2Model.from_pretrained('distilgpt2', output_hidden_states=True)
-# recon_model = GPT2LMHeadModel.from_pretrained('gpt2')
-recon_model = GPT2LMHeadModel.from_pretrained("./finetuned_gpt2_embeddings")
+recon_model = GPT2LMHeadModel.from_pretrained('gpt2')
+# recon_model = GPT2LMHeadModel.from_pretrained("./finetuned_gpt2_embeddings")
 # recon_tokenizer = GPT2Tokenizer.from_pretrained("./finetuned_gpt2_embeddings")
 tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 tokenizer.pad_token = tokenizer.eos_token

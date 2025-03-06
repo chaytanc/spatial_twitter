@@ -13,6 +13,7 @@ dataverse_files/
 finetuned_gpt2_embeddings/
 gpt2_embedding_finetune/
 *.pkl
+*.dat
 
 # Distribution / packaging
 .Python
