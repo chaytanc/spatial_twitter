@@ -1,6 +1,7 @@
 import torch
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, Trainer, TrainingArguments
 from preprocess import embed
+from eval import get_eval_dataset
 import pandas as pd
 import pickle
 from tqdm import tqdm
@@ -19,22 +20,36 @@ model.to(device)
 
 # Ensure model is in train mode
 model.train()
+from torch.utils.data import Dataset
 
-class EmbeddingTextDataset(torch.utils.data.Dataset):
-    def __init__(self, mmap_path, texts, tokenizer):
-        self.embeddings = np.memmap(mmap_path, dtype="float32", mode="r", shape=(len(texts), 768))
+class EmbeddingTextDataset(Dataset):
+    def __init__(self, mmap_path, texts, tokenizer, max_length=MAX_LENGTH):
+        self.embeddings = np.memmap(mmap_path, dtype="float32", mode="r", shape=(NUM_TEXTS, MAX_LENGTH, EMBEDDING_DIM))
         self.texts = texts
         self.tokenizer = tokenizer
+        self.max_length = max_length
 
     def __len__(self):
         return len(self.texts)
 
     def __getitem__(self, idx):
-        embedding = self.embeddings[idx]  # Reads directly from disk without loading all data
-        text = self.texts[idx]
-        tokenized_text = self.tokenizer(text, padding="max_length", truncation=True, return_tensors="pt")
+        # Read the embedding directly from memory-mapped file
+        embedding = torch.tensor(self.embeddings[idx], dtype=torch.float32)  
 
-        return torch.tensor(embedding), tokenized_text
+        # Tokenize the text (ensuring correct output format)
+        tokenized_output = self.tokenizer(
+            self.texts[idx],
+            padding="max_length",
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors="pt"
+        )
+
+        return {
+            "inputs_embeds": embedding,  # Pass embeddings directly
+            # "attention_mask": tokenized_output["attention_mask"].squeeze(0),
+            "labels": tokenized_output["input_ids"].squeeze(0)  # Labels = input_ids for text generation
+        }
 
 
 torch.mps.empty_cache()
@@ -45,7 +60,12 @@ anti_brexit_df = pd.read_csv("dataverse_files/TweetDataset_AntiBrexit_Jan-Mar202
 pro_brexit_df = pd.read_csv("dataverse_files/TweetDataset_ProBrexit_Jan-Mar2022.csv")
 
 anti_brexit_texts = anti_brexit_df["Hit Sentence"].dropna().tolist()
+# Cuts data in half
+len_anti = len(anti_brexit_df)
+anti_brexit_df = anti_brexit_df[:len_anti / 2]
 pro_brexit_texts = pro_brexit_df["Hit Sentence"].dropna().tolist()
+len_pro = len(pro_brexit_df)
+pro_brexit_df = pro_brexit_df[:len_pro / 2]
 texts = anti_brexit_texts + pro_brexit_texts
 
 print(f"Loaded {len(texts)} tweets.")
@@ -54,28 +74,30 @@ print(f"Loaded {len(texts)} tweets.")
 # embeddings = list(map(embed, tqdm(texts, desc="Generating Embeddings", leave=False)))
 
 # Define dimensions
-num_texts = len(texts)
-embedding_dim = 768  # Adjust based on your model
+NUM_TEXTS = len(texts)
+EMBEDDING_DIM = 768  # Adjust based on your model
 
 # Create a memory-mapped file
-embeddings_mmap = np.memmap("embeddings.dat", dtype="float32", mode="w+", shape=(num_texts, MAX_LENGTH, embedding_dim))
+embeddings_mmap = np.memmap("embeddings.dat", dtype="float32", mode="w+", shape=(NUM_TEXTS, MAX_LENGTH, EMBEDDING_DIM))
 
 # Step 1: Identify the last written index
 last_written_idx = 0
-for i in range(num_texts):
+for i in range(NUM_TEXTS):
     if not np.all(embeddings_mmap[i] == 0):  # Check if this row is already written
         last_written_idx = i + 1
     else:
         break
+last_written_idx = embeddings_mmap.shape[0] - 1
 
 # Step 2: Resume writing from last index
 print(f"Resuming from index {last_written_idx}...")
 
-for i in tqdm(range(last_written_idx, num_texts)):  # Start from last saved index
+for i in tqdm(range(last_written_idx, NUM_TEXTS)):  # Start from last saved index
     embedding = embed(texts[i]).detach().cpu().numpy()  # Generate embedding
     embedding = embedding.squeeze(0)
     embeddings_mmap[i, :embedding.shape[0], :] = embedding  # Save to memory-mapped file
     embeddings_mmap.flush()  # Ensure data is saved to disk
+    # TODO delete embedding from memory
 
 print("Embedding generation complete!")
 
@@ -92,6 +114,8 @@ def pickle_data(dataset, filename="synthetic_tweet_embeddings.pkl"):
 
 pickle_data(dataset)
 
+eval_dataset = get_eval_dataset(tokenizer)
+
 # Training arguments with checkpointing
 training_args = TrainingArguments(
     output_dir="./gpt2_embedding_finetune",
@@ -100,7 +124,7 @@ training_args = TrainingArguments(
     save_strategy="steps",  # Save checkpoints at regular steps
     save_steps=500,  # Save every 500 steps
     save_total_limit=3,  # Keep last 3 checkpoints
-    evaluation_strategy="steps",  # Evaluate periodically
+    eval_strategy="steps",  # Evaluate periodically
     eval_steps=500,  # Evaluate every 500 steps
     logging_dir="./logs",
     logging_steps=100,
@@ -114,7 +138,8 @@ training_args = TrainingArguments(
 trainer = Trainer(
     model=model,
     args=training_args,
-    train_dataset=dataset
+    train_dataset=dataset,
+    eval_dataset=eval_dataset,
 )
 
 # Train the model
