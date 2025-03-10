@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from sentence_transformers import SentenceTransformer
+from EmbeddingTextDataset import EmbeddingTextDataset
 from sklearn.cluster import KMeans
 from scipy.spatial import Voronoi, voronoi_plot_2d
 from sklearn.decomposition import PCA
@@ -11,10 +12,20 @@ import matplotlib.pyplot as plt
 import torch
 from tqdm import tqdm
 import gc
+import os
+import shutil
+import pickle
+import yaml
+
+with open("params.yaml", 'r') as file:
+    try:
+        config = yaml.safe_load(file)
+    except yaml.YAMLError as e:
+        print(f"Error parsing YAML file: {e}")
+        config = None
 
 # Models
 model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-# model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
 
 # Do some setup
 # Headers:
@@ -24,12 +35,15 @@ pro_f = "dataverse_files/TweetDataset_ProBrexit_Jan-Mar2022.csv"
 anti_df = pd.read_csv(anti_f)
 pro_df = pd.read_csv(pro_f)
 scaler = StandardScaler().set_output(transform="pandas")
+MAX_LENGTH = config.get("MAX_LENGTH")
+EMBEDDING_DIM = config.get("EMBEDDING_DIM") 
+EMBEDDING_FILE = "test_embeddings.dat"
+EMBEDDING_PKL_FILE = "test_embeds.pkl"
+
+N_CLUSTERS = config.get("N_CLUSTERS")
 
 from transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel
 
-# Instantiate the model and tokenizer
-MAX_LENGTH = 30
-# model = AutoModelCausalLM.from_pretrained('gpt2')
 model = GPT2Model.from_pretrained('distilgpt2', output_hidden_states=True)
 recon_model = GPT2LMHeadModel.from_pretrained('gpt2')
 # recon_model = GPT2LMHeadModel.from_pretrained("./finetuned_gpt2_embeddings")
@@ -46,6 +60,56 @@ if torch.backends.mps.is_available():
         print("MPS GPU out of memory, switching to CPU...")
         model.to("cpu")  # Fall back to CPU
 
+
+def clear_memory(embeddings_mmap=None):
+    """Frees up memory by clearing caches and deleting large objects."""
+    
+    # If memory-mapped file exists, flush & close it
+    if embeddings_mmap is not None:
+        embeddings_mmap.flush()  # Ensure data is written to disk
+        del embeddings_mmap
+
+    # Clear PyTorch GPU cache (for MPS or CUDA)
+    if torch.backends.mps.is_available():
+        torch.mps.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
+
+    print("Memory cleanup completed.")
+
+
+# Pickle dataset
+def pickle_data(dataset, filename):
+    with open(filename, "wb") as f:
+        pickle.dump(dataset, f)
+    print(f"Saved dataset to {filename}")
+
+
+def load_pickled_dataset(filename):
+    """Loads a pickled dataset from a .pkl file."""
+    with open(filename, "rb") as f:
+        dataset = pickle.load(f)
+    print(f"Loaded dataset from {filename}")
+    return dataset
+
+
+def copy_embeddings_file(source_file, backup_dir="embeddings_backup"):
+    """Copies the embeddings file to a backup location to avoid overwriting."""
+    # Ensure the backup directory exists
+    if not os.path.exists(backup_dir):
+        os.makedirs(backup_dir)
+    
+    # Define the backup file path
+    filename = os.path.basename(source_file)
+    backup_path = os.path.join(backup_dir, filename)
+    
+    # Copy the file, preserving metadata
+    shutil.copy2(source_file, backup_path) 
+    
+    print(f"Embeddings file copied to {backup_path}")
+
+
 def embed(text):
     input_ids = tokenizer(text, 
                           return_tensors="pt", 
@@ -60,20 +124,47 @@ def embed(text):
     gc.collect() 
     return embeddings
 
-test_em = embed("test with multiple tokens and embeddings i hope")
+
+# Generate embeddings and store in memory-mapped file
+def generate_embeddings(texts, mmap_file=EMBEDDING_FILE):
+    num_texts = len(texts)
+    embeddings_mmap = np.memmap(mmap_file, dtype="float32", mode="w+", shape=(num_texts, MAX_LENGTH, EMBEDDING_DIM))
+
+    # Find the last written index
+    # TODO does this work?
+    last_written_idx = 0
+    for i in range(num_texts):
+        if np.count_nonzero(embeddings_mmap[i]) == 0:
+            break
+        else:
+            last_written_idx += 1
+    # last_written_idx = min(last_written_idx, num_texts - 1)
+
+    print(f"Resuming from index {last_written_idx}...")
+
+    for i in tqdm(range(last_written_idx, num_texts), desc="Generating Embeddings"):
+        embedding = embed(texts[i]).detach().cpu().numpy().squeeze(0)
+        embeddings_mmap[i, :embedding.shape[0], :] = embedding
+        embeddings_mmap.flush()
+
+    print("Embedding generation complete!")
+    copy_embeddings_file("embeddings.dat", "embeddings_backup")
+    clear_memory(embeddings_mmap=embeddings_mmap)
+    return mmap_file
+
+
 def reconstruct_embedding(embeddings):
-    sys_prompt = "Repeat the precise meaning of the following without adding any additional characters whatsoever: "
-    em_sys_prompt = embed(sys_prompt)
-    reconstruction_embedding = torch.cat((em_sys_prompt, embeddings), 1)
+    embeddings = embeddings.to(torch.float32)  # Force embeddings to float32
     recon_model.eval()
     with torch.no_grad():
-        # Pass embedding through GPT-2 transformer layers
-        outputs = recon_model(inputs_embeds=reconstruction_embedding)  # Generate logits over vocabulary
-    token_ids = torch.argmax(outputs.logits, dim=-1)
-    # decoded_text = tokenizer.decode(pred_ids)
-    decoded_text = tokenizer.decode(token_ids[0])
+        outputs = recon_model.forward(inputs_embeds=embeddings)
+        decode_ids = torch.argmax(outputs.logits, -1)
+    decoded_text = tokenizer.batch_decode(decode_ids, skip_special_tokens=True)
+    # decoded_text = tokenizer.batch_decode()
     print(decoded_text)
-    return reconstruction_embedding
+    return decoded_text 
+
+# test_em = embed("test with multiple tokens and embeddings i hope").to(torch.float32)  # Ensure float32
 # reconstruct_embedding(test_em)
 
 
@@ -81,7 +172,7 @@ def reconstruct_embedding(embeddings):
 # Clustering afterward is going to be necessary for sure in order to make our visualization readable (not having 100000 centroids)
 def cluster(embeddings):
     # TODO n clusters???
-    kmeans = KMeans(n_clusters=30, random_state=0, n_init="auto").fit(embeddings)
+    kmeans = KMeans(n_clusters=N_CLUSTERS, random_state=0, n_init="auto").fit(embeddings)
     print("kmeans centers", kmeans.cluster_centers_)
     return kmeans
 
@@ -96,6 +187,7 @@ def standardize(two_dim):
 def map_to_2d(embeddings):
     # Note: can get the axes of our new space with pca.components_
     pca = PCA(n_components=2)
+    embeddings = np.mean(embeddings, axis=1)
     pca.fit(embeddings)
     two_dim = pca.transform(embeddings)
     return two_dim, pca
@@ -114,12 +206,17 @@ def show_map(kmeans):
     fig = voronoi_plot_2d(vor,plt.gca())
     plt.show()
 
-def process():
-    anti = embed(anti_df["Hit Sentence"][:1000])
-    pro = embed(pro_df["Hit Sentence"][:1000])
-    print("pro0", pro[0])
+def process(load=False):
+    # anti = generate_embeddings(texts=anti_df["Hit Sentence"][:1000])
+    texts = pro_df["Hit Sentence"][:1000]
+    if load:
+        dataset = load_pickled_dataset(EMBEDDING_PKL_FILE)
+    else:
+        mmap_file = generate_embeddings(texts)
+        dataset = EmbeddingTextDataset(mmap_file, texts, tokenizer)
+        pickle_data(dataset, EMBEDDING_PKL_FILE)
     # TODO concat pro and anti?
-    two_dim, pca = map_to_2d(pro)
+    two_dim, pca = map_to_2d(dataset.embeddings)
     kmeans = cluster(two_dim)
     show_map(kmeans)
     reconstruct_pca_meanings(pca, kmeans.cluster_centers_)
@@ -131,5 +228,5 @@ def process():
 # TODO -- need to mix pro and anti tweets in clustering data / not do separately, but still keep track of which is which / have labels
 
 if __name__ == "__main__":
-    # process()
-    reconstruct_embedding(test_em)
+    process(load=True)
+    # reconstruct_embedding(test_em)

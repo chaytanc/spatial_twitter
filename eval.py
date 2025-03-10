@@ -1,12 +1,9 @@
 import pandas as pd
-import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from preprocess import embed
 
 
-
-# Custom dataset class (same as training dataset)
 class EmbeddingTextDataset(Dataset):
     def __init__(self, embeddings, texts, tokenizer):
         self.embeddings = embeddings
@@ -19,6 +16,7 @@ class EmbeddingTextDataset(Dataset):
     def __getitem__(self, idx):
         input_embedding = self.embeddings[idx]
         text = self.texts[idx]
+        # TODO max length yaml jesus
         tokenized_output = self.tokenizer(text, return_tensors="pt", padding="max_length", truncation=True, max_length=30)
 
         return {

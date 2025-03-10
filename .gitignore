@@ -12,8 +12,11 @@ __pycache__/
 dataverse_files/
 finetuned_gpt2_embeddings/
 gpt2_embedding_finetune/
+embeddings_backup/
 *.pkl
 *.dat
+*.csv
+.DS_STORE
 
 # Distribution / packaging
 .Python
