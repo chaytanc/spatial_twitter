@@ -30,8 +30,8 @@ model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 # Do some setup
 # Headers:
 #,Date,Headline,URL,Opening Text,Hit Sentence,Source,Influencer,Country,Subregion,Language,Reach,Desktop Reach,Mobile Reach,Twitter Social Echo,Facebook Social Echo,Reddit Social Echo,National Viewership,Engagement,AVE,Sentiment,Key Phrases,Input Name,Keywords,Twitter Authority,Tweet Id,Twitter Id,Twitter Client,Twitter Screen Name,User Profile Url,Twitter Bio,Twitter Followers,Twitter Following,Alternate Date Format,Time,State,City,Document Tags 
-anti_f = "dataverse_files/TweetDataset_AntiBrexit_Jan-Mar2022.csv"
-pro_f = "dataverse_files/TweetDataset_ProBrexit_Jan-Mar2022.csv"
+anti_f = config["ANTI_FILE"]
+pro_f = config["PRO_FILE"]
 anti_df = pd.read_csv(anti_f)
 pro_df = pd.read_csv(pro_f)
 scaler = StandardScaler().set_output(transform="pandas")
@@ -44,7 +44,9 @@ N_CLUSTERS = config.get("N_CLUSTERS")
 
 from transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel
 
-model = GPT2Model.from_pretrained('distilgpt2', output_hidden_states=True)
+#TODO use the same models across files kind of sort of maybe
+# TODO distilgpt2????
+model = GPT2Model.from_pretrained('gpt2', output_hidden_states=True)
 recon_model = GPT2LMHeadModel.from_pretrained('gpt2')
 # recon_model = GPT2LMHeadModel.from_pretrained("./finetuned_gpt2_embeddings")
 # recon_tokenizer = GPT2Tokenizer.from_pretrained("./finetuned_gpt2_embeddings")
@@ -192,11 +194,11 @@ def map_to_2d(embeddings):
     two_dim = pca.transform(embeddings)
     return two_dim, pca
 
-def reconstruct_pca_meanings(pca, reduced):
-    reconstructions = pca.inverse_transform(reduced)
-    reconstructed_meanings = model.decode(reconstructions)
-    print(reconstructed_meanings)
-    return reconstructed_meanings
+# def reconstruct_pca_meanings(pca, reduced):
+#     reconstructions = pca.inverse_transform(reduced)
+#     reconstructed_meanings = model.decode(reconstructions)
+#     print(reconstructed_meanings)
+#     return reconstructed_meanings
 
 def show_map(kmeans):
     # https://stackoverflow.com/questions/49347738/drawing-boundary-lines-based-on-kmeans-cluster-centres
@@ -219,7 +221,7 @@ def process(load=False):
     two_dim, pca = map_to_2d(dataset.embeddings)
     kmeans = cluster(two_dim)
     show_map(kmeans)
-    reconstruct_pca_meanings(pca, kmeans.cluster_centers_)
+    # reconstruct_pca_meanings(pca, kmeans.cluster_centers_)
 
 # process()
 

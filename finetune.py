@@ -4,15 +4,20 @@ from preprocess import clear_memory, generate_embeddings, pickle_data, load_pick
 from EmbeddingTextDataset import EmbeddingTextDataset
 from eval import get_eval_dataset
 import pandas as pd
-import pickle
-from tqdm import tqdm
-import numpy as np
 import matplotlib.pyplot as plt
+import yaml
+
+with open("params.yaml", 'r') as file:
+    try:
+        config = yaml.safe_load(file)
+    except yaml.YAMLError as e:
+        print(f"Error parsing YAML file: {e}")
+        config = None
 
 # Constants
-MAX_LENGTH = 30
-EMBEDDING_DIM = 768  # Adjust based on your model
-EMBEDDING_FILE = "embeddings.dat"
+MAX_LENGTH = config["MAX_LENGTH"] 
+EMBEDDING_DIM = config["EMBEDDING_DIM"]
+EMBEDDING_FILE = "embeddings.dat" # TODO do the other half of the embeddings
 EMBEDDING_PKL_FILE = "synthetic_tweet_embeddings.pkl"
 
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
@@ -30,8 +35,9 @@ def load_model():
 
 # Load dataset from CSV files
 def load_text_data(cut_data_by):
-    anti_brexit_df = pd.read_csv("dataverse_files/TweetDataset_AntiBrexit_Jan-Mar2022.csv")
-    pro_brexit_df = pd.read_csv("dataverse_files/TweetDataset_ProBrexit_Jan-Mar2022.csv")
+    # TODO does this need to fuck with the encoding and utf8 shit?
+    anti_brexit_df = pd.read_csv(config["ANTI_FILE"])
+    pro_brexit_df = pd.read_csv(config["PRO_FILE"])
 
     anti_brexit_texts = anti_brexit_df["Hit Sentence"].dropna().tolist()
     pro_brexit_texts = pro_brexit_df["Hit Sentence"].dropna().tolist()
@@ -42,7 +48,7 @@ def load_text_data(cut_data_by):
 
     texts = anti_brexit_texts + pro_brexit_texts
     print(f"Loaded {len(texts)} tweets.")
-    return texts
+    return texts, anti_brexit_texts, pro_brexit_texts
 
 
 # Setup training arguments
@@ -64,6 +70,7 @@ def get_training_args():
         greater_is_better=False
     )
 
+# TODO yaml this path
 def save_fine_tuned_model(model, tokenizer, model_path="./finetuned_gpt2_embeddings"):
     """Saves the fine-tuned model and tokenizer to the specified path."""
     model.save_pretrained(model_path)
@@ -114,7 +121,7 @@ def main():
     model, tokenizer = load_model()
 
     # Load raw data
-    texts = load_text_data(cut_data_by=2)
+    texts, _, _ = load_text_data(cut_data_by=2)
 
     # Generate embeddings & save
     mmap_file = generate_embeddings(texts)

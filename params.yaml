@@ -1,9 +1,11 @@
 MAX_LENGTH: 30 
 EMBEDDING_DIM: 768
 BIG_EMBEDDING_FILE: "embeddings.dat"
-SAMPLE_EMBEDDING_FILE: "sample_embeddings.pkl"
-SAMPLE_PCA_FILE: "sample_pca.pkl" 
-SAMPLE_KMEANS_FILE: "sample_kmeans.pkl"
+EMBEDDING_PKL_FILE: "synthetic_tweet_embeddings.pkl"
+SAMPLE_FILE: "sample/sample_df.pkl"
+SAMPLE_PCA_FILE: "sample/sample_pca.pkl" 
+SAMPLE_KMEANS_FILE: "sample/sample_kmeans.pkl"
+SAMPLE_SHAPE_FILE: "sample/sample.shp"
 N_CLUSTERS: 30
 ANTI_FILE: "dataverse_files/TweetDataset_AntiBrexit_Jan-Mar2022.csv"
 PRO_FILE: "dataverse_files/TweetDataset_ProBrexit_Jan-Mar2022.csv"
