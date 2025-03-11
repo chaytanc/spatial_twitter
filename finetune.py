@@ -6,6 +6,7 @@ from eval import get_eval_dataset
 import pandas as pd
 import matplotlib.pyplot as plt
 import yaml
+from PredictionLogger import PredictionLogger
 
 with open("params.yaml", 'r') as file:
     try:
@@ -17,8 +18,8 @@ with open("params.yaml", 'r') as file:
 # Constants
 MAX_LENGTH = config["MAX_LENGTH"] 
 EMBEDDING_DIM = config["EMBEDDING_DIM"]
-EMBEDDING_FILE = "embeddings.dat" # TODO do the other half of the embeddings
-EMBEDDING_PKL_FILE = "synthetic_tweet_embeddings.pkl"
+EMBEDDING_FILE = "embeddings2.dat" # TODO do the other half of the embeddings
+EMBEDDING_PKL_FILE = "synthetic_tweet_embeddings2.pkl"
 
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
@@ -43,8 +44,9 @@ def load_text_data(cut_data_by):
     pro_brexit_texts = pro_brexit_df["Hit Sentence"].dropna().tolist()
 
     # Trim datasets to balance classes
-    anti_brexit_texts = anti_brexit_texts[: len(anti_brexit_texts) // cut_data_by]
-    pro_brexit_texts = pro_brexit_texts[: len(pro_brexit_texts) // cut_data_by]
+    # TODO reverse back to normal first half later?
+    anti_brexit_texts = anti_brexit_texts[len(anti_brexit_texts) // cut_data_by :]
+    pro_brexit_texts = pro_brexit_texts[len(pro_brexit_texts) // cut_data_by :]
 
     texts = anti_brexit_texts + pro_brexit_texts
     print(f"Loaded {len(texts)} tweets.")
@@ -54,7 +56,7 @@ def load_text_data(cut_data_by):
 # Setup training arguments
 def get_training_args():
     return TrainingArguments(
-        output_dir="./gpt2_embedding_finetune",
+        output_dir="./gpt2_embedding_finetune2",
         per_device_train_batch_size=8,
         num_train_epochs=3,
         save_strategy="steps",
@@ -67,18 +69,21 @@ def get_training_args():
         report_to="none",
         load_best_model_at_end=True,
         metric_for_best_model="loss",
-        greater_is_better=False
+        greater_is_better=False,
+        learning_rate=5e-6,
+        weight_decay=0.05,
+        warmup_steps=1000,
     )
 
 # TODO yaml this path
-def save_fine_tuned_model(model, tokenizer, model_path="./finetuned_gpt2_embeddings"):
+def save_fine_tuned_model(model, tokenizer, model_path="./finetuned_gpt2_embeddings2"):
     """Saves the fine-tuned model and tokenizer to the specified path."""
     model.save_pretrained(model_path)
     tokenizer.save_pretrained(model_path)
     print(f"Fine-tuned model saved to {model_path}")
 
 
-def plot_training_progress(trainer, save_path="training_progress.png"):
+def plot_training_progress(trainer, save_path="training_progress2.png"):
     """Plots training and evaluation loss over steps."""
     
     logs = trainer.state.log_history  # Extract log history from Trainer
@@ -121,16 +126,15 @@ def main():
     model, tokenizer = load_model()
 
     # Load raw data
-    texts, _, _ = load_text_data(cut_data_by=2)
+    # texts, _, _ = load_text_data(cut_data_by=2)
 
     # Generate embeddings & save
-    mmap_file = generate_embeddings(texts)
-
-    # Create training datasets
-    dataset = EmbeddingTextDataset(mmap_file, texts, tokenizer)
-    pickle_data(dataset, filename=EMBEDDING_PKL_FILE)
-    # dataset = load_pickled_dataset(filename=EMBEDDING_PKL_FILE)
+    # mmap_file = generate_embeddings(texts)
+    # dataset = EmbeddingTextDataset(mmap_file, texts, tokenizer)
+    # pickle_data(dataset, filename=EMBEDDING_PKL_FILE)
+    dataset = load_pickled_dataset(filename=EMBEDDING_PKL_FILE)
     eval_dataset = get_eval_dataset(tokenizer)
+    prediction_logger = PredictionLogger(tokenizer, eval_dataset, eval_steps=100) 
 
     # Train model
     training_args = get_training_args()
@@ -139,6 +143,7 @@ def main():
         args=training_args,
         train_dataset=dataset,
         eval_dataset=eval_dataset,
+        callbacks=[prediction_logger],
     )
     trainer.train()
     plot_training_progress(trainer)

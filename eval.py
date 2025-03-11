@@ -2,7 +2,7 @@ import pandas as pd
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from preprocess import embed
-
+import torch 
 
 class EmbeddingTextDataset(Dataset):
     def __init__(self, embeddings, texts, tokenizer):
@@ -28,6 +28,6 @@ def get_eval_dataset(tokenizer):
     # Load the evaluation data
     eval_df = pd.read_csv("trumptweets1205-127.csv", encoding='utf-8', encoding_errors='ignore')
     eval_texts = eval_df["Tweet"].dropna().tolist()
-    eval_embeddings = list(map(embed, tqdm(eval_texts, desc="Generating Evaluation Embeddings", leave=False)))
+    eval_embeddings = torch.stack([torch.tensor(embed(text).detach().cpu().numpy().squeeze(0)) for text in tqdm(eval_texts, desc="Generating Evaluation Embeddings", leave=False)])
     eval_dataset = EmbeddingTextDataset(eval_embeddings, eval_texts, tokenizer)
     return eval_dataset

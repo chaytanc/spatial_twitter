@@ -92,6 +92,7 @@ def load_pickled_dataset(filename):
     """Loads a pickled dataset from a .pkl file."""
     with open(filename, "rb") as f:
         dataset = pickle.load(f)
+        f.close()
     print(f"Loaded dataset from {filename}")
     return dataset
 

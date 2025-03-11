@@ -11,6 +11,8 @@ __pycache__/
 .venv/
 dataverse_files/
 finetuned_gpt2_embeddings/
+finetuned_gpt2_embeddings2/
+gpt2_embedding_finetune2/
 gpt2_embedding_finetune/
 embeddings_backup/
 *.pkl
