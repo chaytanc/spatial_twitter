@@ -14,3 +14,6 @@ ANTI_FILE: "dataverse_files/TweetDataset_AntiBrexit_Jan-Mar2022.csv"
 PRO_FILE: "dataverse_files/TweetDataset_ProBrexit_Jan-Mar2022.csv"
 TRUE_PREVS_FILE: "analysis/prevalences.pkl"
 
+OUTPUT_DIR: "analysis/results"
+RESAMPLE_DIR: "sample/"
+RESAMPLE_N: 2

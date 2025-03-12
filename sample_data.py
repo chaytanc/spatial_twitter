@@ -1,3 +1,4 @@
+from pathlib import Path
 import preprocess as p
 from finetune import load_other_text_data, load_text_data
 import yaml
@@ -163,6 +164,13 @@ def load_sample():
         f.close()
     gdf = gpd.read_file(config["SAMPLE_SHAPE_FILE"])
     return df, pca, kmeans, gdf
+
+def resample():
+    output_dir = Path(config.get("RESAMPLE_DIR", "samples/"))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for i in range(config.get("RESAMPLE_N")):
+        sample_dir = output_dir / f"sample_{i}"
+        sample_dir.mkdir(exist_ok=True)
 
 if __name__ == "__main__":
     create_sampled_dataframe()
