@@ -19,7 +19,7 @@ with open("params.yaml", 'r') as file:
 MAX_LENGTH = config["MAX_LENGTH"] 
 EMBEDDING_DIM = config["EMBEDDING_DIM"]
 EMBEDDING_FILE = "embeddings2.dat" # TODO do the other half of the embeddings
-EMBEDDING_PKL_FILE = "synthetic_tweet_embeddings2.pkl"
+EMBEDDING_PKL_FILE = config["EMBEDDING_PKL_FILE2"] 
 
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
@@ -44,7 +44,21 @@ def load_text_data(cut_data_by):
     pro_brexit_texts = pro_brexit_df["Hit Sentence"].dropna().tolist()
 
     # Trim datasets to balance classes
-    # TODO reverse back to normal first half later?
+    anti_brexit_texts = anti_brexit_texts[: len(anti_brexit_texts) // cut_data_by]
+    pro_brexit_texts = pro_brexit_texts[: len(pro_brexit_texts) // cut_data_by]
+
+    texts = anti_brexit_texts + pro_brexit_texts
+    print(f"Loaded {len(texts)} tweets.")
+    return texts, anti_brexit_texts, pro_brexit_texts
+
+def load_other_text_data(cut_data_by):
+    anti_brexit_df = pd.read_csv(config["ANTI_FILE"])
+    pro_brexit_df = pd.read_csv(config["PRO_FILE"])
+
+    anti_brexit_texts = anti_brexit_df["Hit Sentence"].dropna().tolist()
+    pro_brexit_texts = pro_brexit_df["Hit Sentence"].dropna().tolist()
+
+    # Trim datasets to balance classes
     anti_brexit_texts = anti_brexit_texts[len(anti_brexit_texts) // cut_data_by :]
     pro_brexit_texts = pro_brexit_texts[len(pro_brexit_texts) // cut_data_by :]
 

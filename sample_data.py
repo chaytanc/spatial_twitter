@@ -1,11 +1,10 @@
 import preprocess as p
-from finetune import load_text_data
+from finetune import load_other_text_data, load_text_data
 import yaml
-from EmbeddingTextDataset import EmbeddingTextDataset
 import geopandas as gpd
 import pandas as pd
 import numpy as np
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Polygon
 from scipy.spatial import Voronoi
 import pickle
 
@@ -16,13 +15,16 @@ with open("params.yaml", 'r') as file:
         print(f"Error parsing YAML file: {e}")
         config = None
 N_CLUSTERS = config.get("N_CLUSTERS")
-SAMPLES_PER_CLUSTER = 500
+SAMPLES_PER_CLUSTER = config.get("SAMPLES_PER_CLUSTER")
 n = N_CLUSTERS * SAMPLES_PER_CLUSTER
 
-def code_anti_pro():
+def code_anti_pro(half=1):
     ''' Returns a vector one hot encoded to indicate a pro tweet. Makes many assumptions about specific training circumstances'''
     # current embeddings.dat was cut by 2
-    _, anti, pro = load_text_data(cut_data_by=2)
+    if half == 1:
+        _, anti, pro = load_text_data(cut_data_by=2)
+    else:
+        _, anti, pro = load_other_text_data(cut_data_by=2)
     num_anti = len(anti)
     num_pro = len(pro)
     # Assuming embeddings.shape[0] == num_anti + num_pro
