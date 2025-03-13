@@ -38,69 +38,11 @@ def make_sample():
     dataset = p.load_pickled_dataset(filename=config["EMBEDDING_PKL_FILE"])
     # generate n random sample indicies
     indices = np.random.choice(dataset.embeddings.shape[0], size=n, replace=False)
+    # TODO weighted sampling?? load true.pkl from sample/prev/true.pkl and use n col from df
     # index embeddings
     sample = dataset.embeddings[indices,:,:]
     return sample, indices
 
-def get_dynamic_bbox(points, margin=1.0):
-    """
-    Calculate a dynamic bounding box based on the minimum and maximum coordinates of the points.
-    margin: Add a margin around the bounding box to ensure the polygons are fully enclosed.
-    """
-    min_x, min_y = np.min(points, axis=0)
-    max_x, max_y = np.max(points, axis=0)
-    
-    # Add margin to the bounding box
-    return (min_x - margin, max_x + margin, min_y - margin, max_y + margin)
-
-def close_voronoi_region(vor, region, bbox):
-    vertices = [vor.vertices[i] for i in region if i != -1]  # Keep finite vertices
-    if len(vertices) >= 3:  # Check if there are enough points to form a polygon
-        return Polygon(vertices)
-    
-    # If there are infinite edges (region contains -1), close the polygon
-    # Extend edges of the infinite regions to the bounding box
-    region_points = []
-    for i in region:
-        if i != -1:
-            region_points.append(vor.vertices[i])
-        else:
-            # TODO have to intersect bounding box with lines in voronoi in order to close the polygons which is a huge pain in the ass
-            # Handle infinite edges: extend to the bounding box
-            # Find the nearest bounding box points to create a closed edge
-            region_points.extend(bbox)  # Add the bounding box vertices
-
-    # Return the closed polygon for infinite regions
-    return Polygon(region_points)
-
-def voronoi_polygons(vor, margin=1.0):
-    """
-    Convert a Voronoi diagram into a list of closed polygons.
-    Automatically generates the bounding box based on the Voronoi points.
-    margin: Optional margin to extend beyond the points for closing polygons.
-    """
-    polygons = []
-    
-    # Get the bounding box based on the Voronoi points with a margin
-    bbox = get_dynamic_bbox(vor.points, margin)
-    bbox_poly = Polygon([(bbox[0], bbox[2]), (bbox[1], bbox[2]),
-                         (bbox[1], bbox[3]), (bbox[0], bbox[3])])
-    bbox = [[bbox[0], bbox[2]], [bbox[1], bbox[2]],
-            [bbox[1], bbox[3]], [bbox[0], bbox[3]]]
-
-
-    for i, center in enumerate(vor.points):
-        region_index = vor.point_region[i]  # Get corresponding region index
-        region = vor.regions[region_index]  # Get region vertices
-
-        if -1 in region or not region:  # Handle infinite regions
-            polygon = close_voronoi_region(vor, region, bbox)
-        else:
-            polygon = Polygon([vor.vertices[j] for j in region])  # Create the polygon
-
-        polygons.append(polygon)
-
-    return polygons
 
 def bounded_voronoi(points):
     """

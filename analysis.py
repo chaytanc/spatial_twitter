@@ -1,6 +1,7 @@
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from calc_prevalences import calc_prevs
 from preprocess import load_pickled_dataset
 from sample_data import generate_resamples, load_sample
@@ -88,6 +89,19 @@ def run_spatial_analysis(config, sample_number):
       control.family = list(link = "logit"), Ntrials = cluster_data$n)
     print(summary(result))
     saveRDS(result, file = "{sample_output_dir}/inla_result.rds")
+
+    # For an IID (non-spatial) model
+    formula_iid <- Successes ~ 1 + f(Cluster_ID, model = "iid")
+    result_iid <- inla(
+      formula_iid, 
+      family = "binomial", 
+      data = cluster_data,
+      Ntrials = cluster_data$n,
+      control.predictor = list(compute = TRUE),
+      control.compute = list(return.marginals = TRUE)
+    )
+    saveRDS(result_iid, file = "{sample_output_dir}/iid_inla_result.rds")
+
     """
     
     # Run R-INLA
@@ -96,6 +110,7 @@ def run_spatial_analysis(config, sample_number):
     
     # Load and process INLA results
     result = ro.r['readRDS'](f"{sample_output_dir}/inla_result.rds")
+    iid_result = ro.r['readRDS'](f"{sample_output_dir}/iid_inla_result.rds")
     summary_fitted_values = result.rx2("summary.fitted.values") 
     
     # Convert to Pandas DataFrame
@@ -124,14 +139,6 @@ def run_spatial_analysis(config, sample_number):
     gdf.to_file(f"{sample_output_dir}/results.shp")
     
     # Create visualizations
-    
-    # Basic probability map
-    fig, ax = plt.subplots(figsize=(10, 6))
-    gdf.plot(column="0.5quant", cmap="viridis", legend=True, ax=ax)
-    ax.set_title(f"INLA Spatial Effects - Sample {sample_number}")
-    plt.tight_layout()
-    plt.savefig(f"{sample_output_dir}/inla_spatial_effects.png", dpi=300)
-    plt.close()
     
     # Comparison maps
     fig, axs = plt.subplots(1, 4, figsize=(18, 6))
@@ -252,7 +259,7 @@ def run_spatial_analysis(config, sample_number):
 def analyze_with_resampling(config):
     # generate_resamples()
     resample_n = config.get("RESAMPLE_N")
-    for i in range(resample_n):
+    for i in tqdm(range(resample_n), "Running spatial analysis with new samples and regions"):
         summary_stats = run_spatial_analysis(config, i)
 
 # TODO later
