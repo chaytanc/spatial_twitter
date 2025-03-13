@@ -1,5 +1,18 @@
 from transformers import TrainerCallback
 import torch
+import torch.nn.functional as F
+import yaml
+
+def load_config(config_file="params.yaml"):
+    """Load configuration from YAML file"""
+    with open(config_file, 'r') as file:
+        try:
+            config = yaml.safe_load(file)
+            return config
+        except yaml.YAMLError as e:
+            print(f"Error parsing YAML file: {e}")
+            return None
+config = load_config()
 
 class PredictionLogger(TrainerCallback):
     def __init__(self, tokenizer, eval_dataset, eval_steps):
@@ -28,7 +41,14 @@ class PredictionLogger(TrainerCallback):
             # Generate predictions
             with torch.no_grad():
                 outputs = model(inputs_embeds=batch["inputs_embeds"])
-                predictions = outputs.logits.argmax(dim=-1)
+                logits = outputs.logits  # Shape: [batch_size, seq_len, vocab_size]
+
+                # Apply temperature before sampling
+                temperature = 1.0  # Adjust this (higher = more diverse, lower = more deterministic)
+                probs = F.softmax(logits / temperature, dim=-1)
+
+                # Sample from the distribution
+                predictions = torch.multinomial(probs[:, -1, :], num_samples=config.get("MAX_LENGTH"))  # Last token
 
             # Decode predictions and labels
             decoded_predictions = self.tokenizer.decode(predictions[0], skip_special_tokens=True)

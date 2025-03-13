@@ -1,0 +1,7 @@
+coverage_probability: 45.0
+max_absolute_error: 0.2515402393161112
+mean_absolute_error: 0.07643478790950173
+mean_bias: -0.03218022008720188
+mean_variance: 0.0005044534067051042
+min_absolute_error: 0.0017647288924473314
+root_mean_squared_error: 0.10792970250986757

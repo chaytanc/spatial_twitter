@@ -1,6 +1,7 @@
 from pathlib import Path
 import preprocess as p
 from finetune import load_other_text_data, load_text_data
+from EmbeddingTextDataset import EmbeddingTextDataset
 import yaml
 import geopandas as gpd
 import pandas as pd
@@ -67,7 +68,7 @@ def close_voronoi_region(vor, region, bbox):
             # TODO have to intersect bounding box with lines in voronoi in order to close the polygons which is a huge pain in the ass
             # Handle infinite edges: extend to the bounding box
             # Find the nearest bounding box points to create a closed edge
-            region_points.append(bbox)  # Add the bounding box vertices
+            region_points.extend(bbox)  # Add the bounding box vertices
 
     # Return the closed polygon for infinite regions
     return Polygon(region_points)
@@ -84,6 +85,9 @@ def voronoi_polygons(vor, margin=1.0):
     bbox = get_dynamic_bbox(vor.points, margin)
     bbox_poly = Polygon([(bbox[0], bbox[2]), (bbox[1], bbox[2]),
                          (bbox[1], bbox[3]), (bbox[0], bbox[3])])
+    bbox = [[bbox[0], bbox[2]], [bbox[1], bbox[2]],
+            [bbox[1], bbox[3]], [bbox[0], bbox[3]]]
+
 
     for i, center in enumerate(vor.points):
         region_index = vor.point_region[i]  # Get corresponding region index
@@ -98,6 +102,70 @@ def voronoi_polygons(vor, margin=1.0):
 
     return polygons
 
+def bounded_voronoi(points):
+    """
+    Compute Voronoi polygons and intersect them with a boundary.
+    
+    A simpler alternative approach that avoids handling infinite regions directly:
+    1. Add distant points around the boundary to ensure all regions are closed
+    2. Compute Voronoi diagram with these extra points
+    3. Extract only the regions for the original points
+    4. Intersect with the boundary
+    """
+    # Create boundary as Shapely polygon 
+    min_x, min_y = np.min(points, axis=0) - 1
+    max_x, max_y = np.max(points, axis=0) + 1
+    boundary = Polygon([
+        (min_x, min_y), (max_x, min_y),
+        (max_x, max_y), (min_x, max_y)
+    ])
+    
+    # Get boundary coordinates
+    boundary_coords = np.array(boundary.exterior.coords)
+    
+    # Calculate the range of the input points to scale distant points
+    x_range = np.ptp(points[:, 0]) * 10
+    y_range = np.ptp(points[:, 1]) * 10
+    
+    # Add distant points around boundary to close regions
+    # (much farther than the boundary, but not too far to cause numerical issues)
+    min_x, min_y = np.min(boundary_coords, axis=0) - [x_range, y_range]
+    max_x, max_y = np.max(boundary_coords, axis=0) + [x_range, y_range]
+    
+    distant_points = np.array([
+        [min_x, min_y], [max_x, min_y], [max_x, max_y], [min_x, max_y],
+        [min_x, (min_y+max_y)/2], [max_x, (min_y+max_y)/2],
+        [(min_x+max_x)/2, min_y], [(min_x+max_x)/2, max_y]
+    ])
+    
+    # Combine original and distant points
+    all_points = np.vstack([points, distant_points])
+    
+    # Compute Voronoi diagram with all points
+    vor = Voronoi(all_points)
+    
+    # Extract polygons for original points only
+    polygons = []
+    for i in range(len(points)):  # Only consider original points
+        region_index = vor.point_region[i]
+        region = vor.regions[region_index]
+        
+        # Skip empty or unbounded regions (though there should be none with distant points)
+        if -1 in region or len(region) == 0:
+            continue
+            
+        # Create polygon
+        vertices = [vor.vertices[v] for v in region]
+        cell = Polygon(vertices)
+        
+        # Clip to boundary
+        cell = cell.intersection(boundary)
+        
+        if not cell.is_empty and cell.area > 0:
+            polygons.append(cell)
+    
+    return polygons
+
 
 def map(samples):
     two_dim, pca = p.map_to_2d(samples)
@@ -107,7 +175,8 @@ def map(samples):
     vor = Voronoi(centers)
     # polygons, center_map = voronoi_polygons(vor)
     # ordered_polygons = [center_map[tuple(center)] for center in centers]
-    polygons = voronoi_polygons(vor)
+    # polygons = voronoi_polygons(vor)
+    polygons = bounded_voronoi(vor.points)
 
     gdf = gpd.GeoDataFrame(
         pd.DataFrame({'Cluster_ID': range(len(polygons))}),
@@ -116,7 +185,7 @@ def map(samples):
     gdf = gdf.dropna(subset=['geometry'])
     return two_dim, pca, kmeans, gdf
 
-def create_sampled_dataframe():
+def create_sampled_dataframe(output_dir):
     # Load embeddings and randomly sample
     sample_embeddings, indices = make_sample()
     anti_pro_labels, all_texts = code_anti_pro()
@@ -138,39 +207,41 @@ def create_sampled_dataframe():
         "y": two_dim[:, 1]
     })
 
-    pickle_it_up(df, pca, kmeans, gdf)
+    pickle_it_up(df, pca, kmeans, gdf, output_dir)
     
-def pickle_it_up(df, pca, kmeans, gdf):
-    with open(config["SAMPLE_FILE"], "wb") as f:
+def pickle_it_up(df, pca, kmeans, gdf, output_dir):
+    with open(output_dir / "sample_df.pkl", "wb") as f:
         pickle.dump(df, f)
         f.close()
-    with open(config["SAMPLE_PCA_FILE"], "wb") as f:
+    with open(output_dir / "sample_pca.pkl", "wb") as f:
         pickle.dump(pca, f)
         f.close()
-    with open(config["SAMPLE_KMEANS_FILE"], "wb") as f:
+    with open(output_dir / "sample_kmeans.pkl", "wb") as f:
         pickle.dump(kmeans, f)
         f.close()
-    gdf.to_file(config["SAMPLE_SHAPE_FILE"])
+    gdf.to_file(output_dir / "sample.shp")
 
-def load_sample():
-    with open(config["SAMPLE_FILE"], "rb") as f:
+def load_sample(output_dir):
+    with open(output_dir / "sample_df.pkl", "rb") as f:
         df = pickle.load(f)
         f.close()
-    with open(config["SAMPLE_PCA_FILE"], "rb") as f:
+    with open(output_dir / "sample_pca.pkl", "rb") as f:
         pca = pickle.load(f)
         f.close()
-    with open(config["SAMPLE_KMEANS_FILE"], "rb") as f:
+    with open(output_dir / "sample_kmeans.pkl", "rb") as f:
         kmeans = pickle.load(f)
         f.close()
-    gdf = gpd.read_file(config["SAMPLE_SHAPE_FILE"])
+    gdf = gpd.read_file(output_dir / "sample.shp")
     return df, pca, kmeans, gdf
 
-def resample():
-    output_dir = Path(config.get("RESAMPLE_DIR", "samples/"))
+def generate_resamples():
+    output_dir = Path(config.get("SAMPLE_DIR", "sample/"))
     output_dir.mkdir(parents=True, exist_ok=True)
     for i in range(config.get("RESAMPLE_N")):
-        sample_dir = output_dir / f"sample_{i}"
+        sample_dir = output_dir / str(i) 
         sample_dir.mkdir(exist_ok=True)
+        create_sampled_dataframe(sample_dir)
 
 if __name__ == "__main__":
-    create_sampled_dataframe()
+    # create_sampled_dataframe("sample/-1/")
+    generate_resamples()

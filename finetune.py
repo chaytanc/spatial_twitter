@@ -72,7 +72,7 @@ def get_training_args():
     return TrainingArguments(
         output_dir="./gpt2_embedding_finetune2",
         per_device_train_batch_size=8,
-        num_train_epochs=3,
+        num_train_epochs=6,
         save_strategy="steps",
         save_steps=500,
         save_total_limit=3,
@@ -85,7 +85,7 @@ def get_training_args():
         metric_for_best_model="loss",
         greater_is_better=False,
         learning_rate=5e-6,
-        weight_decay=0.05,
+        weight_decay=0.02,
         warmup_steps=1000,
     )
 

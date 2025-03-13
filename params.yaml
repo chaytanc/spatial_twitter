@@ -4,16 +4,17 @@ BIG_EMBEDDING_FILE: "embeddings.dat"
 BIG_EMBEDDING_FILE2: "embeddings2.dat"
 EMBEDDING_PKL_FILE: "synthetic_tweet_embeddings.pkl"
 EMBEDDING_PKL_FILE2: "synthetic_tweet_embeddings2.pkl"
-SAMPLE_FILE: "sample/sample_df.pkl"
-SAMPLE_PCA_FILE: "sample/sample_pca.pkl" 
-SAMPLE_KMEANS_FILE: "sample/sample_kmeans.pkl"
-SAMPLE_SHAPE_FILE: "sample/sample.shp"
-N_CLUSTERS: 30
+SAMPLE_FILE: "sample/-1/sample_df.pkl"
+SAMPLE_PCA_FILE: "sample/-1/sample_pca.pkl" 
+SAMPLE_KMEANS_FILE: "sample/-1/sample_kmeans.pkl"
+SAMPLE_SHAPE_FILE: "sample.shp"
+N_CLUSTERS: 20
 SAMPLES_PER_CLUSTER: 500
 ANTI_FILE: "dataverse_files/TweetDataset_AntiBrexit_Jan-Mar2022.csv"
 PRO_FILE: "dataverse_files/TweetDataset_ProBrexit_Jan-Mar2022.csv"
 TRUE_PREVS_FILE: "analysis/prevalences.pkl"
 
-OUTPUT_DIR: "analysis/results"
-RESAMPLE_DIR: "sample/"
+OUTPUT_DIR: "analysis/spatial_results/"
+SAMPLE_DIR: "sample/"
+PREV_DIR: "sample/prevs/"
 RESAMPLE_N: 2
