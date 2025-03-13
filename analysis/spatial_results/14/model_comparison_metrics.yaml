@@ -1,0 +1,10 @@
+bym_coverage_probability: 25.0
+bym_mean_absolute_error: 0.08624917961027659
+bym_mean_bias: -0.032423834199904335
+bym_mean_variance: 0.00023471903949002097
+bym_root_mean_squared_error: 0.11147661047339798
+iid_coverage_probability: 25.0
+iid_mean_absolute_error: 0.08713565851511482
+iid_mean_bias: -0.03217756058704675
+iid_mean_variance: 0.00026002223905613003
+iid_root_mean_squared_error: 0.11324100382355629

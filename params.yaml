@@ -9,7 +9,7 @@ SAMPLE_PCA_FILE: "sample/-1/sample_pca.pkl"
 SAMPLE_KMEANS_FILE: "sample/-1/sample_kmeans.pkl"
 SAMPLE_SHAPE_FILE: "sample.shp"
 N_CLUSTERS: 20
-SAMPLES_PER_CLUSTER: 1200
+SAMPLES_PER_CLUSTER: 1300
 ANTI_FILE: "dataverse_files/TweetDataset_AntiBrexit_Jan-Mar2022.csv"
 PRO_FILE: "dataverse_files/TweetDataset_ProBrexit_Jan-Mar2022.csv"
 TRUE_PREVS_FILE: "analysis/prevalences.pkl"
@@ -17,4 +17,4 @@ TRUE_PREVS_FILE: "analysis/prevalences.pkl"
 OUTPUT_DIR: "analysis/spatial_results/"
 SAMPLE_DIR: "sample/"
 PREV_DIR: "sample/prevs/"
-RESAMPLE_N: 10 
+RESAMPLE_N: 20 

@@ -1,4 +1,6 @@
 from pathlib import Path
+
+from tqdm import tqdm
 import preprocess as p
 from finetune import load_other_text_data, load_text_data
 from EmbeddingTextDataset import EmbeddingTextDataset
@@ -179,7 +181,8 @@ def load_sample(output_dir):
 def generate_resamples():
     output_dir = Path(config.get("SAMPLE_DIR", "sample/"))
     output_dir.mkdir(parents=True, exist_ok=True)
-    for i in range(config.get("RESAMPLE_N")):
+    print("Creating new sampling frames...")
+    for i in tqdm(range(config.get("RESAMPLE_N"))):
         sample_dir = output_dir / str(i) 
         sample_dir.mkdir(exist_ok=True)
         create_sampled_dataframe(sample_dir)

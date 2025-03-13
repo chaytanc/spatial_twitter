@@ -18,6 +18,10 @@ embeddings_backup/
 *.pkl
 *.dat
 *.csv
+*.shx
+*.cpg
+*.dbf
+*.shp
 .DS_STORE
 
 # Distribution / packaging
