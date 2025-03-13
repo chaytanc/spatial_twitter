@@ -413,49 +413,10 @@ def analyze_with_resampling(config):
     for i in tqdm(range(resample_n), "Running spatial analysis with new samples and regions"):
         summary_stats = run_spatial_analysis(config, i)
 
-# TODO later
-def compare_resamples(config, num_samples):
-    """Compare metrics across multiple resamples"""
-    output_dir = Path(config.get("OUTPUT_DIR", "analysis/results"))
-    all_metrics = []
-    
-    # Load metrics from each sample
-    for i in range(num_samples):
-        sample_output_dir = output_dir / str(i)
-        metrics_file = sample_output_dir / "metrics.yaml"
-        
-        if metrics_file.exists():
-            with open(metrics_file, 'r') as f:
-                metrics = yaml.safe_load(f)
-                metrics['sample'] = i
-                all_metrics.append(metrics)
-    
-    if not all_metrics:
-        print("No metrics found. Run resampling first.")
-        return
-    
-    # Convert to DataFrame for easier analysis
-    metrics_df = pd.DataFrame(all_metrics)
-    
-    # Create comparison plots
-    metrics_to_plot = ['mean_absolute_error', 'root_mean_squared_error', 
-                       'coverage_probability', 'mean_variance']
-    
-    fig, axs = plt.subplots(2, 2, figsize=(14, 10))
-    axs = axs.flatten()
-    
-    for i, metric in enumerate(metrics_to_plot):
-        ax = axs[i]
-        ax.plot(metrics_df['sample'], metrics_df[metric], 'o-')
-        ax.set_xlabel('Sample Number')
-        ax.set_ylabel(metric)
-        ax.set_title(f'Variation in {metric} Across Samples')
-        ax.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.savefig(f"{output_dir}/metrics_comparison.png")
+
 
 if __name__ == "__main__":
   config = load_config()
   clear_memory()
-  analyze_with_resampling(config)
+  # analyze_with_resampling(config)
+  compare_resamples(config)
